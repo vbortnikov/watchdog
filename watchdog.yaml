@@ -1,0 +1,11 @@
+apiVersion: net.post.ru/v1
+kind: Watchdog
+metadata:
+  name: test-dog
+  namespace: default
+spec:
+  checkCmd: ["sh", "-c", "nc -vz 10.238.59.113 22"]
+  execLabels:
+    app: watchdog
+    kind: netcat 
+  intervalMinutes: 3

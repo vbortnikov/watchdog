@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nettools
+  namespace: watchdog-system
+  labels:
+    app: watchdog
+    kind: netcat
+spec:
+  containers:
+  - name: ubuntu
+    image: cloud.repo.russianpost.ru/nettools:ubuntu.20.04
+    imagePullPolicy: Always
+    command: [ "sleep", "1200" ]

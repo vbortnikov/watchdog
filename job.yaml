@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ping-2
+spec:
+  activeDeadlineSeconds: 10
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ping
+        image: cloud.repo.russianpost.ru/nettools:ubuntu.20.04
+        command: ["ping", "-c", "3", "127.0.0.1"]

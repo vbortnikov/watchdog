@@ -1,0 +1,16 @@
+domain: post.ru
+layout:
+- go.kubebuilder.io/v3
+projectName: watchdog
+repo: cloud.repo.russianpost.ru/watchdog
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: post.ru
+  group: net
+  kind: Watchdog
+  path: cloud.repo.russianpost.ru/watchdog/api/v1
+  version: v1
+version: "3"
