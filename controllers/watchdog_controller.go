@@ -9,6 +9,7 @@ import (
 	netv1 "cloud.repo.russianpost.ru/watchdog/api/v1"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
@@ -16,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const RECONCILE_INTERVAL_MIN = 5
+const RECONCILE_INTERVAL_MIN = 2
 const RECONCILE_INTERVAL_MAX = 60
 
 // WatchdogReconciler reconciles a Watchdog object
@@ -27,6 +28,7 @@ type WatchdogReconciler struct {
 	RESTConfig *rest.Config
 }
 
+// doing the job in pod matching labels
 func execIntoPod(watchdog *netv1.Watchdog, pod *corev1.Pod, r *WatchdogReconciler, logger *logr.Logger) error {
 	execReq := r.RESTClient.Post().Namespace(pod.Namespace).
 		Resource("pods").
@@ -46,7 +48,7 @@ func execIntoPod(watchdog *netv1.Watchdog, pod *corev1.Pod, r *WatchdogReconcile
 	if err != nil {
 		return fmt.Errorf("error while creating remote command executor: %v", err)
 	}
-	logger.V(0).Info("----", "execReq.URL()=", fmt.Sprintf("%v", execReq.URL()))
+	//logger.V(0).Info("----", "execReq.URL()=", fmt.Sprintf("%v", execReq.URL()))
 	logger.V(0).Info("Done", "exec=", fmt.Sprintf("%v", exec))
 
 	return exec.Stream(remotecommand.StreamOptions{
@@ -93,17 +95,35 @@ func (r *WatchdogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.V(0).Error(err, "unable to list pod to exec into")
 		return ctrl.Result{}, err
 	}
+	watchdog.Status.PointStatuses = nil // not sure if this assignment is needed
+	watchdog.Status.PointStatuses = make([]netv1.PointStatus, 0)
 	for i, item := range podList.Items {
-		logger.V(0).Info("--->", "pod N", i)
-		if err := execIntoPod(&watchdog, &item, r, &logger); err != nil {
-			logger.V(0).Info("in pod loop", "pod N", i, "exec result", fmt.Sprintf("%v", err))
+		logger.V(0).Info("--->", "pod N", i, "hostIP", item.Status.HostIP)
+		t := metav1.Time{Time: time.Now()}
+		currentCheck := netv1.PointStatus{
+			PodName:      item.ObjectMeta.Name,
+			PodNamespace: item.ObjectMeta.Namespace,
+			PodUID:       string(item.ObjectMeta.UID),
+			HostIP:       item.Status.HostIP,
+			StartTime:    &t,
+			Error:        "",
 		}
+		if err := execIntoPod(&watchdog, &item, r, &logger); err != nil {
+			currentCheck.Error = fmt.Sprintf("%v", err)
+			logger.V(0).Info("error execIntoPod", "pod N", i, "exec result", currentCheck.Error)
+		}
+		watchdog.Status.PointStatuses = append(watchdog.Status.PointStatuses, currentCheck)
 	}
-
+	if err := r.Status().Update(ctx, &watchdog); err != nil {
+		logger.V(0).Error(err, "unable to update Watchdog status")
+		return ctrl.Result{}, err
+	}
+	// can we have this optimized or static ?
 	if watchdog.Spec.IntervalMinutes >= RECONCILE_INTERVAL_MIN && watchdog.Spec.IntervalMinutes <= RECONCILE_INTERVAL_MAX {
 		logger.V(0).Info("correcting interval...")
 		reconcileInterval = time.Duration(watchdog.Spec.IntervalMinutes) * time.Minute
 	}
+	logger.V(0).Info("returning", "reconcileInterval", reconcileInterval)
 	return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 }
 

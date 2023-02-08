@@ -7,5 +7,5 @@ spec:
   checkCmd: ["sh", "-c", "nc -vz 10.238.59.113 22"]
   execLabels:
     app: watchdog
-    kind: netcat 
+    kind: netcat
   intervalMinutes: 3
