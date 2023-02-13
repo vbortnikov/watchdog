@@ -8,6 +8,7 @@ import (
 
 	netv1 "cloud.repo.russianpost.ru/watchdog/api/v1"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const RECONCILE_INTERVAL_MIN = 2
@@ -26,6 +28,28 @@ type WatchdogReconciler struct {
 	Scheme     *runtime.Scheme
 	RESTClient rest.Interface
 	RESTConfig *rest.Config
+}
+
+// for metrics, more info at https://book.kubebuilder.io/reference/metrics.html
+
+var (
+	execResult = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "exec_result",
+			Help: "Result of command from pod",
+		},
+		[]string{
+			// name + namespace of CR (watchdog)
+			"watchdog",
+			// node IP
+			"hostip",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(execResult)
+	//metrics.Registry.Unregister(internal.ReconcileTotal)
 }
 
 // doing the job in pod matching labels
@@ -98,6 +122,7 @@ func (r *WatchdogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	watchdog.Status.PointStatuses = nil // not sure if this assignment is needed
 	watchdog.Status.PointStatuses = make([]netv1.PointStatus, 0)
 	for i, item := range podList.Items {
+		var metricGauge float64
 		logger.V(0).Info("--->", "pod N", i, "hostIP", item.Status.HostIP)
 		t := metav1.Time{Time: time.Now()}
 		currentCheck := netv1.PointStatus{
@@ -111,8 +136,13 @@ func (r *WatchdogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := execIntoPod(&watchdog, &item, r, &logger); err != nil {
 			currentCheck.Error = fmt.Sprintf("%v", err)
 			logger.V(0).Info("error execIntoPod", "pod N", i, "exec result", currentCheck.Error)
+			metricGauge = 0
+		} else {
+			metricGauge = 1
 		}
 		watchdog.Status.PointStatuses = append(watchdog.Status.PointStatuses, currentCheck)
+
+		execResult.WithLabelValues(watchdog.Name+watchdog.ObjectMeta.Namespace, item.Status.HostIP).Set(metricGauge)
 	}
 	if err := r.Status().Update(ctx, &watchdog); err != nil {
 		logger.V(0).Error(err, "unable to update Watchdog status")
