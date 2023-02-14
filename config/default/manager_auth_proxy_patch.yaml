@@ -33,14 +33,15 @@ spec:
               - "ALL"
         image: kubebuilder/kube-rbac-proxy:v0.13.0
         args:
-        - "--secure-listen-address=0.0.0.0:8443"
+        #- "--secure-listen-address=0.0.0.0:8443"
+        - "--insecure-listen-address=0.0.0.0:8082"
         - "--upstream=http://127.0.0.1:8080/"
         - "--logtostderr=true"
         - "--v=0"
         ports:
-        - containerPort: 8443
+        - containerPort: 8082
           protocol: TCP
-          name: https
+          name: http
         resources:
           limits:
             cpu: 500m
