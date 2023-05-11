@@ -2,7 +2,7 @@
 kubebuilder init --domain post.ru --repo cloud.repo.russianpost.ru/watchdog  
 kubebuilder create api --group net --version v1 --kind Watchdog
 
-make
+make  
 make docker-build docker-push IMG=cloud.repo.russianpost.ru/watchdog:v.0.0.1
 make deploy IMG=cloud.repo.russianpost.ru/watchdog:v.0.0.1
 
